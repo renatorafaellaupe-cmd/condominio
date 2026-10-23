@@ -1,0 +1,44 @@
+GESTÃO DE MANUTENÇÃO PREDIAL · CONDOMÍNIOS — SEGURANÇA SEC-V1
+Projeto Firebase: gestaodecondominio-f7163
+
+O QUE MUDOU
+- Login obrigatório (e-mail e senha) para a administração e a equipe.
+- Três perfis: operador, admin e super_admin (aba "Usuários" só para super_admin).
+- Morador continua sem login (link .../#morador): só envia solicitação e
+  consulta o próprio protocolo (protocolo + unidade). Não vê nada do sistema.
+- Regras do banco (database.rules.json) conferem tudo isso no servidor.
+- CSP + saneamento de fotos e textos contra injeção de código (XSS).
+- Ao clicar em "Sair", a cópia local dos dados é apagada do navegador.
+
+PASSO A PASSO (na ordem)
+1. Console do Firebase > Authentication > Sign-in method:
+   ative "E-mail/senha".
+2. Authentication > Users > Adicionar usuário: seu e-mail e uma senha.
+   Copie o "UID do usuário" que aparece na lista.
+3. Realtime Database > Dados: na raiz, clique em "+" e crie:
+     usuarios
+       <SEU UID>
+         nome:     Seu nome
+         email:    seu e-mail
+         perfil:   super_admin
+         ativo:    true        (digite true, sem aspas: precisa ser booleano)
+         criadoEm: 2026-10-23
+   O arquivo primeiro_super_admin.json mostra o mesmo formato.
+4. Na pasta do projeto (precisa de internet), grave os lacres SRI:
+     python atualizar_csp.py public/index.html --sri
+5. Publique site + regras:
+     firebase deploy
+6. Abra https://gestaodecondominio-f7163.web.app e entre. Na aba
+   "Usuários", cadastre a equipe (operador/admin). O sistema cria a conta
+   no Authentication e o registro em /usuarios.
+
+SEMPRE QUE ALTERAR O JAVASCRIPT DO index.html
+     python atualizar_csp.py public/index.html
+     python atualizar_csp.py public/index.html --verificar
+     firebase deploy
+
+OBSERVAÇÕES
+- UIDs são por projeto: os do Presença Inteligente não valem aqui.
+- Sem App Check, alguém mal-intencionado com o link do morador pode enviar
+  solicitações falsas em volume. As regras limitam formato e tamanho, mas
+  não a quantidade. Próximo passo recomendado: ativar o App Check (reCAPTCHA).
