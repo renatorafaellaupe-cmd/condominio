@@ -1,0 +1,9 @@
+{
+  "COLE_AQUI_O_UID": {
+    "nome": "Seu nome",
+    "email": "seu.email@exemplo.com",
+    "perfil": "super_admin",
+    "ativo": true,
+    "criadoEm": "2026-10-23"
+  }
+}
