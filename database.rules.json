@@ -1,11 +1,14 @@
 {
   // =====================================================================
   //  GESTÃO DE MANUTENÇÃO PREDIAL · CONDOMÍNIOS
-  //  Regras de Segurança (Realtime Database) — versão SEC-V2
+  //  Regras de Segurança (Realtime Database) — versão SEC-V3 (Cotação Ágil)
   //  Projeto Firebase: gestaodecondominio-f7163
   //  Banco: https://gestaodecondominio-f7163-default-rtdb.firebaseio.com
+  //  Atualização: protocolo sem hífen (SOL20260010) e consulta do morador pelo nome.
   //  Casa com o index.html SEC-V2 (login + perfis + CSP + XSS + cabeçalho editável).
   //  SEC-V2: exclusão de usuários protegida, cabeçalho (marca) em /config e no público.
+  //  SEC-V3: Cotação Ágil (pregão simplificado) em /manutencao_publico/pregoes e
+  //          contador dos Termos de Referência (seqOrc) liberado para usuário ativo.
   //  Publicar SOMENTE depois do index.html SEC-V2 estar no ar e do primeiro
   //  super_admin estar cadastrado em /usuarios (ver LEIA-ME.txt).
   //
@@ -16,9 +19,12 @@
   //                         configurações, solicitações e exclusões.
   //  super_admin  nível 3 — tudo do admin + criar, editar e desativar
   //                         usuários.
+  //  fornecedor   sem login — com o link pessoal da cotação, lê o Termo de
+  //                         Referência e grava SOMENTE a própria proposta, dentro
+  //                         do prazo. Não vê as propostas dos concorrentes.
   //  morador      sem login — só CRIA solicitação nova (status "aberta"),
   //                         lê a lista de condomínios e consulta o próprio
-  //                         protocolo (precisa do protocolo + unidade).
+  //                         protocolo (protocolo OU nome cadastrado + unidade).
   //                         Não lê nenhum dado do sistema.
   // =====================================================================
 
@@ -105,7 +111,7 @@
           ".write": "(auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true && newData.exists()) || (!data.exists() && newData.exists())",
           ".validate": "$id.matches(/^[A-Za-z0-9_-]{1,100}$/) && newData.child('id').val() === $id && ((auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true) || (newData.hasChildren(['protocolo','condominioId','unidade','nome','assunto','descricao','criadoEm','status']) && newData.child('status').val() === 'aberta' && !newData.hasChild('osId') && !newData.hasChild('resposta') && !newData.hasChild('motivo') && !newData.hasChild('resolvidoEm') && !newData.hasChild('ativoId') && !newData.child('fotos').hasChild('3')))",
 
-          "protocolo":    { ".validate": "newData.isString() && newData.val().matches(/^SOL-[0-9]{4}-[0-9]{1,8}$/)" },
+          "protocolo":    { ".validate": "newData.isString() && (newData.val().matches(/^SOL[0-9]{8,12}$/) || newData.val().matches(/^SOL-[0-9]{4}-[0-9]{1,8}$/))" },
           "condominioId": { ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{0,100}$/)" },
           "unidade":      { ".validate": "newData.isString() && newData.val().length <= 60" },
           "nome":         { ".validate": "newData.isString() && newData.val().length <= 120" },
@@ -142,6 +148,11 @@
           ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === 1) || (data.exists() && newData.val() === data.val() + 1) || ((auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true) && (!data.exists() || newData.val() >= data.val())))"
         },
         "seqOS": {
+          ".write": "auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true && newData.exists()",
+          ".validate": "newData.isNumber() && (!data.exists() || newData.val() >= data.val())"
+        },
+        // [SEC-V3] seqOrc (número do Termo de Referência): usuário ativo pode avançar, nunca voltar.
+        "seqOrc": {
           ".write": "auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true && newData.exists()",
           ".validate": "newData.isNumber() && (!data.exists() || newData.val() >= data.val())"
         },
@@ -186,8 +197,9 @@
         }
       },
 
-      // Consulta de protocolo. A chave é um resumo de protocolo + unidade:
-      // não dá para listar; só lê quem souber os dois.
+      // Consulta de protocolo. A chave é um resumo de (protocolo + unidade) ou de
+      // (nome cadastrado + unidade + posição): não dá para listar; só lê quem souber os dois.
+      // Protocolo aceito: SOL20260010 (atual) ou SOL-2026-0010 (antigo).
       // Sem nome, telefone ou e-mail do morador.
       "consulta": {
         ".write": "auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true",
@@ -196,11 +208,58 @@
           // morador: só cria a entrada da própria solicitação, "aberta" e sem resposta
           ".write": "!data.exists() && newData.exists() && newData.child('status').val() === 'aberta' && !newData.hasChild('resposta')",
           ".validate": "$k.matches(/^c[a-z0-9]{2,30}$/) && newData.hasChildren(['protocolo', 'status'])",
-          "protocolo": { ".validate": "newData.isString() && newData.val().matches(/^SOL-[0-9]{4}-[0-9]{1,8}$/)" },
+          "protocolo": { ".validate": "newData.isString() && (newData.val().matches(/^SOL[0-9]{8,12}$/) || newData.val().matches(/^SOL-[0-9]{4}-[0-9]{1,8}$/))" },
           "status":    { ".validate": "newData.isString() && newData.val().matches(/^(aberta|analise|atendimento|resolvida|recusada)$/)" },
           "resposta":  { ".validate": "newData.isString() && newData.val().length <= 2000" },
           "criadoEm":  { ".validate": "newData.isString() && newData.val().matches(/^([0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?)?)?$/)" },
           "$outro":    { ".validate": false }
+        }
+      },
+
+      // [SEC-V3] Cotação Ágil (pregão simplificado)
+      //   Usuário ativo: cria, acompanha e encerra cotações (lê e grava tudo aqui).
+      //   Fornecedor (sem login): com o link pessoal (?pregao=<id>&k=<chave>) lê o
+      //   Termo de Referência e grava SOMENTE a própria proposta, dentro do prazo.
+      //   Não dá para listar cotações, convites nem propostas: só lê quem tem a chave.
+      //   O CNPJ do convidado fica guardado só como resumo criptográfico (hash).
+      "pregoes": {
+        ".read": "auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true",
+        ".write": "auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true",
+        "$pid": {
+          // dados do Termo de Referência, prazo, modalidade e situação
+          "info": { ".read": true },
+          // PDF do Termo de Referência
+          "pdf":  { ".read": true },
+          // convite de cada fornecedor: resumo do CNPJ + nome (só com a chave)
+          "conv": { "$k": { ".read": true } },
+          // menor lance atual (lances abertos): o valor é público, a chave não
+          "menor": {
+            "v": { ".read": true },
+            ".write": "root.child('manutencao_publico/pregoes/'+$pid+'/info/status').val() === 'aberta' && now < root.child('manutencao_publico/pregoes/'+$pid+'/info/prazoMs').val() && root.child('manutencao_publico/pregoes/'+$pid+'/info/modalidade').val() === 'aberta' && newData.child('k').isString() && root.child('manutencao_publico/pregoes/'+$pid+'/conv/'+newData.child('k').val()).exists() && newData.child('v').val() === root.child('manutencao_publico/pregoes/'+$pid+'/lances/'+newData.child('k').val()+'/total').val() && (!data.exists() || newData.child('v').val() < data.child('v').val())"
+          },
+          // proposta de cada fornecedor (só a própria, só com a chave, só dentro do prazo)
+          "lances": {
+            "$k": {
+              ".read": true,
+              ".write": "newData.exists() && root.child('manutencao_publico/pregoes/'+$pid+'/conv/'+$k).exists() && root.child('manutencao_publico/pregoes/'+$pid+'/info/status').val() === 'aberta' && now < root.child('manutencao_publico/pregoes/'+$pid+'/info/prazoMs').val()",
+              ".validate": "newData.child('em').isNumber()",
+              "visto":        { ".validate": "newData.isNumber()" },
+              "interesse":    { ".validate": "newData.isBoolean()" },
+              "em":           { ".validate": "newData.isNumber()" },
+              "n":            { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000" },
+              "mo":           { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999" },
+              "mat":          { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99999999" },
+              "total":        { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 99999999" },
+              "prazoDias":    { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 3650" },
+              "validadeDias": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 365" },
+              "garantia":     { ".validate": "newData.isString() && newData.val().length <= 300" },
+              "obs":          { ".validate": "newData.isString() && newData.val().length <= 2000" },
+              "anexo":        { ".validate": "newData.hasChildren(['nome','tipo','data']) && newData.child('data').isString() && newData.child('data').val().length < 2900000 && (newData.child('data').val().beginsWith('data:application/pdf;base64,') || newData.child('data').val().beginsWith('data:image/'))" },
+              // vencedor / não vencedor: só o usuário ativo marca
+              "resultado":    { ".validate": "auth != null && root.child('usuarios').child(auth.uid).child('ativo').val() === true" },
+              "$outro":       { ".validate": false }
+            }
+          }
         }
       },
 
